@@ -11,9 +11,19 @@ def generate_dataset(n_images: int, seed: int, out_dir: Path) -> None:
     clips = load_clips(Path(ASSET_DIR, "paper_clips"))
 
     # test
-    print(backgrounds[0].shape)
-    print(clips["red"].shape)
-    cv2.imwrite(str(out_dir / "test_bg.jpg"), backgrounds[0])
+    result_img = backgrounds[0].copy()
+    clip = scale_clip(clips["red"], 180)
+    box = place_clip(result_img, clip, 400, 300)
+    debug = result_img.copy()
+    debug_img = cv2.rectangle(
+        debug, 
+        (box["left"], box["top"]), 
+        (box["right"], box["bottom"]), 
+        (0, 255, 0), 
+        2
+    )
+    cv2.imwrite(Path(out_dir, "result.jpg"), result_img)
+    cv2.imwrite(Path(out_dir, "debug.jpg"), debug_img)
 
 
 def load_backgrounds(directory: Path) -> list[np.ndarray]:
@@ -42,6 +52,27 @@ def load_clips(directory: Path) -> dict[str, np.ndarray]:
         clip = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
         if clip is None:
             raise FileNotFoundError(f"Could not read {path}")
-        clips[path.stem.split("_")[0]] = clip
+        cropped_clip = crop_to_content(clip)
+        clips[path.stem.split("_")[0]] = cropped_clip
 
     return clips
+
+
+def crop_to_content(img: np.ndarray) -> np.ndarray:
+    alpha = img[:, :, 3]
+    x, y, w, h = cv2.boundingRect(alpha)
+    return img[y:y+h, x:x+w]
+
+
+def scale_clip(img: np.ndarray, length: int) -> np.ndarray:
+    s = length / img.shape[0]
+    return cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)
+
+
+def place_clip(background: np.ndarray, clip: np.ndarray, x: int, y: int) -> dict:
+    h, w = clip.shape[:2]
+    roi = background[y:y+h, x:x+w]
+    alpha = clip[:, :, 3:4] / 255.0
+    colors = clip[:, :, :3]
+    background[y:y+h, x:x+w] = (alpha * colors + (1 - alpha) * roi).astype(np.uint8)
+    return {"top": y, "bottom": y+h, "left": x, "right": x+w}
