@@ -12,11 +12,12 @@ def generate_dataset(n_images: int, seed: int, out_dir: Path) -> None:
 
     # test
     result_img = backgrounds[0].copy()
-    clip = scale_clip(clips["red"], 180)
-    box = place_clip(result_img, clip, 400, 300)
-    debug = result_img.copy()
+    clip_s = scale_clip(clips["red"], 180)
+    clip_sr = rotate_clip(clip_s, 45)
+    box = place_clip(result_img, clip_sr, 400, 300)
+    debug_img = result_img.copy()
     debug_img = cv2.rectangle(
-        debug, 
+        debug_img, 
         (box["left"], box["top"]), 
         (box["right"], box["bottom"]), 
         (0, 255, 0), 
@@ -76,3 +77,24 @@ def place_clip(background: np.ndarray, clip: np.ndarray, x: int, y: int) -> dict
     colors = clip[:, :, :3]
     background[y:y+h, x:x+w] = (alpha * colors + (1 - alpha) * roi).astype(np.uint8)
     return {"top": y, "bottom": y+h, "left": x, "right": x+w}
+
+
+def rotate_clip(clip: np.ndarray, angle: float) -> np.ndarray:
+    h, w = clip.shape[:2]
+    center = (w/2, h/2)
+    matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+    cos = abs(matrix[0, 0])
+    sin = abs(matrix[0, 1])
+    new_w = int(h * sin + w * cos)
+    new_h = int(h * cos + w * sin)
+    matrix[0, 2] += new_w / 2 - center[0]
+    matrix[1, 2] += new_h / 2 - center[1]    
+    clip_r = cv2.warpAffine(
+        clip, 
+        matrix, 
+        (new_w, new_h), 
+        flags=cv2.INTER_LINEAR, 
+        borderMode=cv2.BORDER_CONSTANT, 
+        borderValue=(0, 0, 0, 0)
+    )
+    return crop_to_content(clip_r)
