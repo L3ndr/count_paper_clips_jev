@@ -6,25 +6,27 @@ ASSET_DIR = Path("assets")
 IMAGE_SIZE = (1024, 768)
 
 def generate_dataset(n_images: int, seed: int, out_dir: Path) -> None:
+    rng = np.random.default_rng(seed)
     out_dir.mkdir(parents=True, exist_ok=True)
     backgrounds = load_backgrounds(Path(ASSET_DIR, "backgrounds"))
     clips = load_clips(Path(ASSET_DIR, "paper_clips"))
 
     # test
-    result_img = backgrounds[0].copy()
-    clip_s = scale_clip(clips["red"], 180)
-    clip_sr = rotate_clip(clip_s, 45)
-    box = place_clip(result_img, clip_sr, 400, 300)
-    debug_img = result_img.copy()
-    debug_img = cv2.rectangle(
-        debug_img, 
-        (box["left"], box["top"]), 
-        (box["right"], box["bottom"]), 
-        (0, 255, 0), 
-        2
-    )
-    cv2.imwrite(Path(out_dir, "result.jpg"), result_img)
-    cv2.imwrite(Path(out_dir, "debug.jpg"), debug_img)
+    for i in range(5):
+        canvas = random_background(backgrounds, rng)
+        clip = random_clip(clips, rng)
+        x, y = random_position(canvas, clip, rng)
+        box = place_clip(canvas, clip, x, y)
+        debug_img = canvas.copy()
+        debug_img = cv2.rectangle(
+            debug_img, 
+            (box["left"], box["top"]), 
+            (box["right"], box["bottom"]), 
+            (0, 255, 0), 
+            2
+        )
+        cv2.imwrite(Path(out_dir, f"result_{i}.jpg"), canvas)
+        cv2.imwrite(Path(out_dir, f"debug_{i}.jpg"), debug_img)
 
 
 def load_backgrounds(directory: Path) -> list[np.ndarray]:
@@ -98,3 +100,22 @@ def rotate_clip(clip: np.ndarray, angle: float) -> np.ndarray:
         borderValue=(0, 0, 0, 0)
     )
     return crop_to_content(clip_r)
+
+
+def random_clip(clips: dict, rng) -> np.ndarray:
+    color = rng.choice(list(clips.keys()))
+    clip = clips[color]
+    clip_s = scale_clip(clip, rng.integers(150, 201))
+    return rotate_clip(clip_s, rng.uniform(0, 360))
+
+
+def random_position(background: np.ndarray, clip: np.ndarray, rng) -> tuple[int, int]:
+    H, W = background.shape[:2]
+    h, w = clip.shape[:2]
+    x = rng.integers(0, W-w+1)
+    y = rng.integers(0, H-h+1)
+    return (int(x), int(y))
+
+
+def random_background(backgrounds: np.ndarray, rng) -> np.ndarray:
+    return rng.choice(backgrounds)
