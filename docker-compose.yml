@@ -6,3 +6,4 @@ services:
       - ./data:/app/data
       - ./results:/app/results
       - ./src:/app/src
+      - ./assets:/app/assets
