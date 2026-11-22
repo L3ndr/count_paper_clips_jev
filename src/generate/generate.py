@@ -4,6 +4,9 @@ from pathlib import Path
 
 ASSET_DIR = Path("assets")
 IMAGE_SIZE = (1024, 768)
+MIN_CLIPS = 0
+MAX_CLIPS = 10
+MAX_ATTEMPTS = 1000
 
 def generate_dataset(n_images: int, seed: int, out_dir: Path) -> None:
     rng = np.random.default_rng(seed)
@@ -11,13 +14,38 @@ def generate_dataset(n_images: int, seed: int, out_dir: Path) -> None:
     backgrounds = load_backgrounds(Path(ASSET_DIR, "backgrounds"))
     clips = load_clips(Path(ASSET_DIR, "paper_clips"))
 
-    # test
-    for i in range(5):
-        canvas = random_background(backgrounds, rng)
+    for i in range(n_images):
+        canvas, debug_img, boxes = generate_image(backgrounds, clips, rng)
+        
+        cv2.imwrite(Path(out_dir, f"result_{i}.jpg"), canvas)
+        cv2.imwrite(Path(out_dir, f"debug_{i}.jpg"), debug_img)
+
+
+def generate_image(backgrounds: np.ndarray, clips: np.ndarray, rng) -> tuple[np.ndarray, np.ndarray, list[dict]]:
+    clip_count = rng.integers(MIN_CLIPS, MAX_CLIPS+1)
+    canvas = random_background(backgrounds, rng)
+    boxes = []
+
+    attempts = 0
+    while len(boxes) < clip_count and attempts < MAX_ATTEMPTS:
+        attempts += 1
         clip = random_clip(clips, rng)
         x, y = random_position(canvas, clip, rng)
-        box = place_clip(canvas, clip, x, y)
-        debug_img = canvas.copy()
+        h, w = clip.shape[:2]
+        box = make_box(x, y, w, h)
+
+        overlaps = False
+        for b in boxes:
+            if boxes_overlap(box, b):
+                overlaps = True
+                break
+
+        if not overlaps:
+            box = place_clip(canvas, clip, x, y)
+            boxes.append(box)
+
+    debug_img = canvas.copy()
+    for box in boxes:
         debug_img = cv2.rectangle(
             debug_img, 
             (box["left"], box["top"]), 
@@ -25,8 +53,8 @@ def generate_dataset(n_images: int, seed: int, out_dir: Path) -> None:
             (0, 255, 0), 
             2
         )
-        cv2.imwrite(Path(out_dir, f"result_{i}.jpg"), canvas)
-        cv2.imwrite(Path(out_dir, f"debug_{i}.jpg"), debug_img)
+        
+    return canvas, debug_img, boxes
 
 
 def load_backgrounds(directory: Path) -> list[np.ndarray]:
@@ -72,13 +100,17 @@ def scale_clip(img: np.ndarray, length: int) -> np.ndarray:
     return cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)
 
 
+def make_box(x, y, w, h) -> dict:
+    return {"top": y, "bottom": y+h, "left": x, "right": x+w}
+
+
 def place_clip(background: np.ndarray, clip: np.ndarray, x: int, y: int) -> dict:
     h, w = clip.shape[:2]
     roi = background[y:y+h, x:x+w]
     alpha = clip[:, :, 3:4] / 255.0
     colors = clip[:, :, :3]
     background[y:y+h, x:x+w] = (alpha * colors + (1 - alpha) * roi).astype(np.uint8)
-    return {"top": y, "bottom": y+h, "left": x, "right": x+w}
+    return make_box(x, y, w, h)
 
 
 def rotate_clip(clip: np.ndarray, angle: float) -> np.ndarray:
@@ -119,3 +151,8 @@ def random_position(background: np.ndarray, clip: np.ndarray, rng) -> tuple[int,
 
 def random_background(backgrounds: np.ndarray, rng) -> np.ndarray:
     return rng.choice(backgrounds)
+
+
+def boxes_overlap(a: dict, b: dict) -> bool:
+    return a["left"] < b["right"] and b["left"] < a["right"] and a["top"] < b["bottom"] and b["top"] < a["bottom"]
+    
