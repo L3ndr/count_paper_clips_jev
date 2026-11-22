@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 from pathlib import Path
+import json
 
 ASSET_DIR = Path("assets")
 IMAGE_SIZE = (1024, 768)
@@ -10,15 +11,32 @@ MAX_ATTEMPTS = 1000
 
 def generate_dataset(n_images: int, seed: int, out_dir: Path) -> None:
     rng = np.random.default_rng(seed)
+
     out_dir.mkdir(parents=True, exist_ok=True)
+    result_dir = out_dir / "result"
+    debug_dir = out_dir / "debug"
+    result_dir.mkdir(parents=True, exist_ok=True)
+    debug_dir.mkdir(parents=True, exist_ok=True)
+
     backgrounds = load_backgrounds(Path(ASSET_DIR, "backgrounds"))
     clips = load_clips(Path(ASSET_DIR, "paper_clips"))
+    labels = {"seed": seed, "images": []}
 
     for i in range(n_images):
         canvas, debug_img, boxes = generate_image(backgrounds, clips, rng)
         
-        cv2.imwrite(Path(out_dir, f"result_{i}.jpg"), canvas)
-        cv2.imwrite(Path(out_dir, f"debug_{i}.jpg"), debug_img)
+        cv2.imwrite(Path(result_dir, f"result_{i}.jpg"), canvas)
+        cv2.imwrite(Path(debug_dir, f"debug_{i}.jpg"), debug_img)
+
+        labels["images"].append({
+            "file": f"result_{i}.jpg", 
+            "debug_img": f"debug_{i}.jpg", 
+            "count": len(boxes), 
+            "boxes": boxes}
+        )
+
+    with open(out_dir / "labels.json", "w") as file:
+        json.dump(labels, file, indent=2)
 
 
 def generate_image(backgrounds: np.ndarray, clips: np.ndarray, rng) -> tuple[np.ndarray, np.ndarray, list[dict]]:
