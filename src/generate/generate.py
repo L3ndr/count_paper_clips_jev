@@ -191,8 +191,8 @@ def random_background(
         backgrounds: list[np.ndarray],
         rng: np.random.Generator
     ) -> np.ndarray:
-    """Choose a random background."""
-    return rng.choice(backgrounds)
+    """Choose a random background and return a copy of it."""
+    return backgrounds[rng.integers(len(backgrounds))].copy()
 
 
 def crop_to_content(img: np.ndarray) -> np.ndarray:
