@@ -80,10 +80,10 @@ def generate_image(
     attempts = 0
     while len(boxes) < clip_count and attempts < MAX_ATTEMPTS:
         attempts += 1
-        clip = random_clip(clips, rng)
+        color, clip = random_clip(clips, rng)
         x, y = random_position(canvas, clip, rng)
         h, w = clip.shape[:2]
-        box = make_box(x, y, w, h)
+        box = make_box(color, x, y, w, h)
 
         overlaps = False
         for b in boxes:
@@ -92,7 +92,7 @@ def generate_image(
                 break
 
         if not overlaps:
-            box = place_clip(canvas, clip, x, y)
+            box = place_clip(canvas, clip, color, x, y)
             boxes.append(box)
 
     debug_img = canvas.copy()
@@ -163,12 +163,15 @@ def load_clips(directory: Path) -> dict[str, np.ndarray]:
     return clips
 
 
-def random_clip(clips: dict[str, np.ndarray], rng: np.random.Generator) -> np.ndarray:
+def random_clip(
+        clips: dict[str, np.ndarray],
+        rng: np.random.Generator
+    ) -> tuple[str, np.ndarray]:
     """Choose, scale and rotate a random paper clip."""
-    color = rng.choice(list(clips.keys()))
+    color = str(rng.choice(list(clips.keys())))
     clip = clips[color]
     clip_s = scale_clip(clip, rng.integers(150, 201))
-    return rotate_clip(clip_s, rng.uniform(0, 360))
+    return (color, rotate_clip(clip_s, rng.uniform(0, 360)))
 
 
 def random_position(
@@ -239,7 +242,7 @@ def rotate_clip(clip: np.ndarray, angle: float) -> np.ndarray:
     return crop_to_content(clip_r)
 
 
-def place_clip(background: np.ndarray, clip: np.ndarray, x: int, y: int) -> dict:
+def place_clip(background: np.ndarray, clip: np.ndarray, color: str, x: int, y: int) -> dict:
     """Place paper clip on the background in-place.
 
     Args:
@@ -256,12 +259,12 @@ def place_clip(background: np.ndarray, clip: np.ndarray, x: int, y: int) -> dict
     alpha = clip[:, :, 3:4] / 255.0
     colors = clip[:, :, :3]
     background[y:y+h, x:x+w] = (alpha * colors + (1 - alpha) * roi).astype(np.uint8)
-    return make_box(x, y, w, h)
+    return make_box(color, x, y, w, h)
 
 
-def make_box(x: int, y: int, w: int, h: int) -> dict:
+def make_box(color: str, x: int, y: int, w: int, h: int) -> dict:
     """Return a bounding box dict from top-left corner and size."""
-    return {"top": y, "bottom": y+h, "left": x, "right": x+w}
+    return {"color": color, "top": y, "bottom": y+h, "left": x, "right": x+w}
 
 
 def boxes_overlap(a: dict, b: dict) -> bool:
